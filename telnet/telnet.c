@@ -75,6 +75,9 @@ struct telnet_session
     rt_uint8_t echo_mode;
 
     rt_sem_t read_notice;
+
+    rt_sem_t tx_sem;
+    rt_thread_t telnet_tx;
 };
 
 static struct telnet_session* telnet;
@@ -116,7 +119,9 @@ static void send_option_to_client(struct telnet_session* telnet, rt_uint8_t opti
     rt_ringbuffer_put(&telnet->tx_ringbuffer, optbuf, 3);
     rt_mutex_release(telnet->tx_ringbuffer_lock);
 
-    send_to_client(telnet);
+    rt_sem_release(telnet->tx_sem);
+
+    //send_to_client(telnet);
 }
 
 /* process rx data */
@@ -294,7 +299,8 @@ static rt_size_t telnet_write (rt_device_t dev, rt_off_t pos, const void* buffer
     rt_mutex_release(telnet->tx_ringbuffer_lock);
 
     /* send data to telnet client */
-    send_to_client(telnet);
+    //send_to_client(telnet);
+    rt_sem_release(telnet->tx_sem);
 
     return (rt_uint32_t) ptr - (rt_uint32_t) buffer;
 }
@@ -314,6 +320,18 @@ static rt_err_t telnet_control(rt_device_t dev, int cmd, void *args)
         telnet_control
     };
 #endif /* RT_USING_DEVICE_OPS */
+
+
+static void telnet_tx_thread(void* parameter)
+{
+  
+  while(1) {
+     
+      rt_sem_take(telnet->tx_sem,RT_WAITING_FOREVER);
+      send_to_client(telnet);
+  }    
+}
+
 
 /* telnet server thread entry */
 static void telnet_thread(void* parameter)
@@ -423,7 +441,7 @@ static void telnet_thread(void* parameter)
         while (1)
         {
             /* try to send all data in tx ringbuffer */
-            send_to_client(telnet);
+            //send_to_client(telnet);
 
             /* do a rx procedure */
             if ((recv_len = recv(telnet->client_fd, recv_buf, RECV_BUF_LEN, 0)) > 0)
@@ -484,6 +502,15 @@ void telnet_server(void)
         telnet->read_notice = rt_sem_create("telnet_rx", 0, RT_IPC_FLAG_FIFO);
 
         tid = rt_thread_create("telnet", telnet_thread, RT_NULL, 2048, 25, 5);
+
+        /* Create sender semaphore and thread */
+        telnet->tx_sem=rt_sem_create("TelnetTx",0, RT_IPC_FLAG_FIFO);
+        RT_ASSERT( telnet->tx_sem);
+        telnet->telnet_tx=rt_thread_create("TelnetTx",telnet_tx_thread,RT_NULL, 2048, 25, 5);
+        RT_ASSERT(telnet->telnet_tx);
+        rt_thread_startup(telnet->telnet_tx);
+
+
         if (tid != RT_NULL)
         {
             rt_thread_startup(tid);
