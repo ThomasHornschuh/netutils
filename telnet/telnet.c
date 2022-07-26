@@ -86,7 +86,7 @@ static struct telnet_session* telnet;
 static void send_to_client(struct telnet_session* telnet)
 {
     rt_size_t length;
-    rt_uint8_t tx_buffer[32];
+    rt_uint8_t tx_buffer[256];
 
     while (1)
     {
@@ -501,12 +501,12 @@ void telnet_server(void)
 
         telnet->read_notice = rt_sem_create("telnet_rx", 0, RT_IPC_FLAG_FIFO);
 
-        tid = rt_thread_create("telnet", telnet_thread, RT_NULL, 2048, 25, 5);
+        tid = rt_thread_create("telnet", telnet_thread, RT_NULL, 2048, 15, 5);
 
         /* Create sender semaphore and thread */
         telnet->tx_sem=rt_sem_create("TelnetTx",0, RT_IPC_FLAG_FIFO);
         RT_ASSERT( telnet->tx_sem);
-        telnet->telnet_tx=rt_thread_create("TelnetTx",telnet_tx_thread,RT_NULL, 2048, 25, 5);
+        telnet->telnet_tx=rt_thread_create("TelnetTx",telnet_tx_thread,RT_NULL, 2048, 15, 5);
         RT_ASSERT(telnet->telnet_tx);
         rt_thread_startup(telnet->telnet_tx);
 
